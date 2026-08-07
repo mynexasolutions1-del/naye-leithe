@@ -1,26 +1,216 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* Tailwind directives — used only by admin routes.
+   The public site uses style.css (imported in layout.tsx) */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* ── SVG icon sizes ─────────────────────────────────────────────────────────
+   Flask puts these in base.html's inline <style>.  style.css targets "img"
+   selectors (.social-btn img, .nav-arrow img, .why-icon img) but the Next.js
+   build uses inline <svg> elements instead. These rules mirror Flask exactly.
+   ─────────────────────────────────────────────────────────────────────────── */
+.nav-icon-btn svg     { width: 20px; height: 20px; }
+.social-btn svg       { width: 14px; height: 14px; }
+.close-menu svg       { width: 20px; height: 20px; }
+.nav-arrow svg        { width: 20px; height: 20px; }
+.why-icon svg         { width: 32px; height: 32px; }
+.announcement-bar svg { width: 16px; height: 16px; }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ── Form element protection from Tailwind v4 @layer base resets ────────────
+   Non-layered rules win over @layer rules, so these explicit declarations
+   guarantee the Flask newsletter form design is preserved.
+   ─────────────────────────────────────────────────────────────────────────── */
+.nl-form input  { background-color: #ffffff; color: var(--text, #423034); }
+.nl-form button { background-color: var(--charcoal, #1c1c1c); color: #ffffff; }
+
+/* General public-site buttons — ensure Tailwind doesn't reset cursor */
+.btn-primary, .btn-outline, .btn-white,
+.product-add-btn, .add-to-cart,
+.apply-filters-btn, .submit-review-btn,
+.size-chart-link { cursor: pointer; }
+
+/* ── Product carousel: fix left-card accessibility on iOS Safari ────────────
+   style.css sets `justify-content: center !important` on .carousel-track and
+   .na-carousel-track.  On flex containers with overflow-x: auto, centering
+   splits the overflow equally left and right — but scrollLeft cannot go
+   below 0 in LTR, so the left-side overflow is permanently inaccessible
+   (iOS Safari exhibits this most visibly).  With, e.g., 4 × 160px cards on a
+   360px viewport the first card is clipped by ~176px and can never be reached.
+   Overriding to flex-start ensures scroll position 0 always shows the first
+   card's left edge.  `.scroll-carousel .na-carousel-track` has specificity
+   (0,2,0) > (0,1,0), so it wins the !important cascade over style.css.
+   ─────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .scroll-carousel .na-carousel-track {
+    justify-content: flex-start !important;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ── Hero category cards — touch swipe on mobile ───────────────────────────
+   Flask drives scroll via JS touchstart/touchmove listeners (base.html) and
+   an auto-marquee (index.html). In Next.js the equivalent is CSS native
+   scroll: overflow-x: auto gives iOS/Android swipe for free.
+   style.css sets `overflow: hidden` on .hero-cards at ≤480px, so we use
+   `.hero .hero-cards` (one extra specificity level) to guarantee the win.
+   ─────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .hero .hero-cards {
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;   /* smooth momentum on iOS */
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;               /* Firefox — hide scrollbar */
+  }
+  .hero .hero-cards::-webkit-scrollbar {
+    display: none;                       /* Chrome / Safari — hide scrollbar */
+  }
+  .hero-card {
+    scroll-snap-align: start;
+    flex-shrink: 0;                      /* prevent cards from squishing */
+  }
+}
+
+/* ── Mobile section horizontal padding — match promo-banners (12px) ─────────
+   style.css sets generic sections to 24px side padding (1024px rule) and
+   .categories-section to 20px (its own 768px rule). The promo-banners section
+   uses 12px, creating an inconsistent edge gap across the page on mobile.
+   This override aligns every content section to 12px so the gap is uniform.
+   .categories-section .section-header also gets extra 15px (its own rule in
+   style.css), so we reset it to 0 — the section's 12px is the only indent.
+   All rules use !important so they win over style.css's non-!important rules
+   even at the 480px breakpoint where style.css overrides .categories-section
+   and .newsletter with wider padding again.
+   ─────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  section:not(.hero) {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  .newsletter {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  /* Reset inner section-header indent so it doesn't double-up (12 + 15 = 27px) */
+  .categories-section .section-header {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+}
+
+/* ── Responsive footer ───────────────────────────────────────────────────────
+   style.css only has a 480px footer breakpoint (1-col).
+   Between 480 – 768px the 4-column grid is still active, which overflows
+   narrow phone screens and causes the left columns to be cut off.
+   These rules give the footer a proper mobile layout at every breakpoint.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* Tablet (481px – 768px): 2-column grid, brand spans full row */
+@media (max-width: 768px) {
+  footer {
+    padding: 40px 24px 24px;
+    overflow-x: hidden;
+  }
+
+  .footer-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 32px 24px;
+    margin-bottom: 32px;
+  }
+
+  /* Brand column spans both columns */
+  .footer-brand {
+    grid-column: 1 / -1;
+  }
+
+  /* Bottom bar stacks on mobile */
+  .footer-bottom {
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    text-align: center;
+  }
+
+  .payment-icons {
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}
+
+/* Phone (≤ 480px): single column, tight padding */
+@media (max-width: 480px) {
+  footer {
+    padding: 32px 16px 20px;
+    overflow-x: hidden;
+  }
+
+  .footer-grid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+
+  /* Reset brand column span (already 1fr now) */
+  .footer-brand {
+    grid-column: auto;
+  }
+
+  .footer-col h4 {
+    margin-bottom: 14px;
+  }
+
+  .footer-col a {
+    margin-bottom: 10px;
+  }
+
+  .footer-bottom {
+    padding-top: 20px;
+  }
+}
+
+/* ── Cart & Wishlist pages — classes missing from style.css ─────────────────
+   style.css has the core layout rules (.cart-page, .cart-table, .qty-control,
+   etc.) but a few helper classes are absent and need to be defined here.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* Variant label pills shown under product name in the cart table
+   e.g. "Size: M"  "Color: Navy" */
+.cart-prod-variants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}
+.cart-prod-variants span {
+  font-size: 11px;
+  color: var(--muted, #8a7f78);
+  background: var(--sand, #f0e8e0);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+/* Decorative tag shown above the h1 on the wishlist page
+   e.g. "✦  My Favorites" — mirrors .hero-tag in style.css */
+.header-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--crimson, #c7566a);
+  margin-bottom: 12px;
+}
+
+/* Hide browser-native up/down arrows on the qty-control number input.
+   style.css gives the input border:none and background:none but doesn't
+   address spinner buttons — on some browsers they appear inside the cell. */
+.qty-control input::-webkit-outer-spin-button,
+.qty-control input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.qty-control input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
