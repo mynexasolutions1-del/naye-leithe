@@ -23,6 +23,23 @@ export async function cancelOrderAction(formData: FormData) {
   redirect(`/admin/orders/${orderId}?_flash=Order+cancelled&_type=info`);
 }
 
+// Permanently removes an order and its line items. This is what unblocks
+// deleting a product that's only undeletable because it appears in this
+// order — order_item -> product is NO ACTION, so as long as any order
+// still references a product, that product can't be deleted (by design,
+// so a live order never silently loses one of its line items). Deleting
+// the order here first is the intended way around that.
+export async function deleteOrderAction(formData: FormData) {
+  const orderId = parseInt(formData.get("order_id") as string);
+  await supabaseAdmin.from("order_item").delete().eq("order_id", orderId);
+  const { error } = await supabaseAdmin.from("order").delete().eq("id", orderId);
+  if (error) {
+    redirect(`/admin/orders?_flash=${encodeURIComponent(error.message)}&_type=error`);
+  }
+  revalidatePath("/admin/orders");
+  redirect("/admin/orders?_flash=Order+deleted&_type=success");
+}
+
 /* ── Reviews ─────────────────────────────────────────────────────────────── */
 export async function approveReviewAction(formData: FormData) {
   const id = formData.get("review_id") as string;
@@ -88,9 +105,43 @@ export async function updateCategoryAction(
 }
 
 export async function deleteCategoryAction(formData: FormData) {
-  const id = formData.get("category_id") as string;
-  await supabaseAdmin.from("category").delete().eq("id", parseInt(id));
+  const id = parseInt(formData.get("category_id") as string);
+
+  // category is referenced by product.category_id and sub_category.category_id
+  // with NO ACTION on delete, so Postgres would reject the delete outright
+  // while either exists. Rather than block the admin from deleting a
+  // category (per product decision: category deletion should always
+  // succeed), unassign it from anything pointing at it first — products
+  // become category-less, subcategories can't exist without a parent so
+  // they're removed too (which in turn un-assigns any product that was
+  // sitting in one of them).
+  const { data: subs } = await supabaseAdmin
+    .from("sub_category")
+    .select("id")
+    .eq("category_id", id);
+  const subIds = (subs ?? []).map((s) => s.id);
+
+  await supabaseAdmin
+    .from("product")
+    .update({ category_id: null, sub_category_id: null, cat_name: null })
+    .eq("category_id", id);
+
+  if (subIds.length > 0) {
+    // Catches products whose sub_category_id points into this category's
+    // subcategories even if their own category_id somehow drifted.
+    await supabaseAdmin
+      .from("product")
+      .update({ sub_category_id: null })
+      .in("sub_category_id", subIds);
+    await supabaseAdmin.from("sub_category").delete().in("id", subIds);
+  }
+
+  const { error } = await supabaseAdmin.from("category").delete().eq("id", id);
+  if (error) {
+    redirect(`/admin/categories?_flash=${encodeURIComponent(error.message)}&_type=error`);
+  }
   revalidatePath("/admin/categories");
+  revalidatePath("/admin/products");
   redirect("/admin/categories?_flash=Category+deleted&_type=success");
 }
 
@@ -129,9 +180,20 @@ export async function updateSubcategoryAction(
 }
 
 export async function deleteSubcategoryAction(formData: FormData) {
-  const id = formData.get("sub_id") as string;
-  await supabaseAdmin.from("sub_category").delete().eq("id", parseInt(id));
+  const id = parseInt(formData.get("sub_id") as string);
+
+  // product.sub_category_id -> sub_category.id is NO ACTION on delete.
+  // Same product decision as categories: deleting a subcategory always
+  // succeeds, products just lose that assignment (they keep their
+  // category_id — only the more specific subcategory goes away).
+  await supabaseAdmin.from("product").update({ sub_category_id: null }).eq("sub_category_id", id);
+
+  const { error } = await supabaseAdmin.from("sub_category").delete().eq("id", id);
+  if (error) {
+    redirect(`/admin/categories?_flash=${encodeURIComponent(error.message)}&_type=error`);
+  }
   revalidatePath("/admin/categories");
+  revalidatePath("/admin/products");
   redirect("/admin/categories?_flash=Subcategory+deleted&_type=success");
 }
 
@@ -343,7 +405,37 @@ export async function deleteCustomerAction(formData: FormData) {
 /* ── Products ────────────────────────────────────────────────────────────── */
 export async function deleteProductAction(formData: FormData) {
   const id = formData.get("product_id") as string;
-  await supabaseAdmin.from("product").delete().eq("id", id);
+
+  // product is referenced by order_item, product_image, product_attribute,
+  // product_variation, and review. product_attribute/product_variation are
+  // ON DELETE CASCADE so those clean themselves up, but product_image and
+  // review are NO ACTION — since virtually every product has at least a
+  // gallery image, the delete was failing on that constraint on every
+  // single attempt. The failure was never checked (`await ...delete()`
+  // ignored its `error`), so the UI redirected to a "Product deleted"
+  // success toast regardless, while the row silently stayed put.
+  //
+  // order_item is left alone and blocks deletion outright — a product that
+  // has actually been ordered shouldn't disappear from order history.
+  const { count: orderCount } = await supabaseAdmin
+    .from("order_item")
+    .select("*", { count: "exact", head: true })
+    .eq("product_id", id);
+
+  if ((orderCount ?? 0) > 0) {
+    redirect(`/admin/products?_flash=${encodeURIComponent(`Can't delete — this product appears in ${orderCount} order${orderCount === 1 ? "" : "s"}. Mark it out of stock instead.`)}&_type=error`);
+  }
+
+  await Promise.all([
+    supabaseAdmin.from("product_image").delete().eq("product_id", id),
+    supabaseAdmin.from("review").delete().eq("product_id", id),
+  ]);
+
+  const { error } = await supabaseAdmin.from("product").delete().eq("id", id);
+  if (error) {
+    redirect(`/admin/products?_flash=${encodeURIComponent(error.message)}&_type=error`);
+  }
+
   revalidatePath("/admin/products");
   redirect("/admin/products?_flash=Product+deleted&_type=success");
 }

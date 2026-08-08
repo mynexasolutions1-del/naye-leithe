@@ -66,8 +66,6 @@ export default function Footer({ categories }: FooterProps) {
           <Link href="/profile">Track Order</Link>
           <Link href="/shipping">Shipping Policy</Link>
           <Link href="/refund">Refund &amp; Cancellation</Link>
-          <Link href="/size-guide">Size Guide</Link>
-          <Link href="/faq">FAQ</Link>
           <Link href="/contact">Contact Us</Link>
         </div>
 
@@ -77,7 +75,6 @@ export default function Footer({ categories }: FooterProps) {
           <Link href="/about">About Us</Link>
           <Link href="/about#story">Our Story</Link>
           <Link href="/blogs">Blog</Link>
-          <Link href="/careers">Careers</Link>
           <Link href="/privacy">Privacy Policy</Link>
           <Link href="/terms">Terms &amp; Conditions</Link>
         </div>

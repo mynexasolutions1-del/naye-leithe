@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { deleteProductAction } from "@/actions/admin";
@@ -53,7 +53,7 @@ interface Props {
   totalCount: number;
   currentPage: number;
   totalPages: number;
-  currentFilters: { category: string; status: string };
+  currentFilters: { category: string; status: string; search: string };
 }
 
 /* ── Component ───────────────────────────────────────────────────────────── */
@@ -67,15 +67,26 @@ export default function ProductsClient({
 }: Props) {
   const router    = useRouter();
   const tbodyRef  = useRef<HTMLTableSectionElement>(null);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [searchValue, setSearchValue] = useState(currentFilters.search);
 
-  /* ── Client-side search (mirrors Flask's productSearch keyup handler) ── */
+  /* ── Search — was purely client-side (DOM show/hide on the current page's
+     rows), which meant searching for anything not already on screen found
+     nothing since products are server-paginated. Now debounced into a real
+     URL-driven search that runs across the whole catalog, same pattern as
+     the category/status filters below. ── */
   function handleSearch(e: React.ChangeEvent<HTMLInputElement>) {
-    const q = e.target.value.toLowerCase();
-    tbodyRef.current?.querySelectorAll<HTMLTableRowElement>("tr").forEach((row) => {
-      const name = row.querySelector<HTMLElement>(".product-info strong")?.textContent?.toLowerCase() ?? "";
-      const id   = row.querySelector<HTMLElement>(".prod-id")?.textContent?.toLowerCase() ?? "";
-      row.style.display = name.includes(q) || id.includes(q) ? "" : "none";
-    });
+    const value = e.target.value;
+    setSearchValue(value);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      const p = new URLSearchParams();
+      if (currentFilters.category) p.set("category", currentFilters.category);
+      if (currentFilters.status)   p.set("status",   currentFilters.status);
+      if (value.trim()) p.set("search", value.trim());
+      p.set("page", "1");
+      router.push(`/admin/products${p.size ? `?${p.toString()}` : ""}`);
+    }, 400);
   }
 
   /* ── Category / Status onChange → URL navigation (mirrors applyFilters) ── */
@@ -83,6 +94,7 @@ export default function ProductsClient({
     const p = new URLSearchParams();
     if (key !== "category" && currentFilters.category) p.set("category", currentFilters.category);
     if (key !== "status"   && currentFilters.status)   p.set("status",   currentFilters.status);
+    if (currentFilters.search) p.set("search", currentFilters.search);
     if (value) p.set(key, value);
     p.set("page", "1");
     router.push(`/admin/products${p.size ? `?${p.toString()}` : ""}`);
@@ -93,6 +105,7 @@ export default function ProductsClient({
     const params = new URLSearchParams();
     if (currentFilters.category) params.set("category", currentFilters.category);
     if (currentFilters.status)   params.set("status",   currentFilters.status);
+    if (currentFilters.search)   params.set("search",   currentFilters.search);
     params.set("page", String(p));
     return `/admin/products?${params.toString()}`;
   }
@@ -142,6 +155,7 @@ export default function ProductsClient({
             <input
               type="text"
               placeholder="Search products..."
+              value={searchValue}
               onChange={handleSearch}
             />
           </div>

@@ -1,7 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { updateOrderStatusAction, cancelOrderAction } from "@/actions/admin";
+import { updateOrderStatusAction, cancelOrderAction, deleteOrderAction } from "@/actions/admin";
 import ConfirmDeleteButton from "@/components/admin/ConfirmDeleteButton";
 import { Package, User, MapPin, CreditCard, ChevronLeft } from "lucide-react";
 
@@ -60,6 +60,16 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
             </select>
             <button type="submit" className="btn btn-primary">Update Status</button>
           </form>
+          <ConfirmDeleteButton
+            action={deleteOrderAction}
+            name="order_id"
+            value={String(order.id)}
+            message="Permanently delete this order? This removes it and its line items for good — this cannot be undone. Any products only referenced by this order become deletable afterward."
+            className="btn btn-danger"
+            label="Delete Order"
+          >
+            Delete Order
+          </ConfirmDeleteButton>
         </div>
       </div>
 

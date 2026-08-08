@@ -3675,8 +3675,154 @@ nav {
     .checkout-container { grid-template-columns: 1fr; }
     .checkout-sidebar { position: static; }
 }
+/* ── Legal / policy pages (Shipping, Refund, Privacy, Terms) ────────────── */
+.legal-hero {
+    background: var(--cream);
+    padding: 64px 24px 48px;
+    text-align: center;
+}
+.legal-hero h1 { font-family: 'Playfair Display', serif; font-size: 42px; margin: 14px 0 10px; }
+.legal-hero p { color: var(--muted); font-size: 15px; }
+
+.legal-content {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+    line-height: 1.75;
+    color: var(--text);
+}
+.legal-content h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 24px;
+    margin: 40px 0 14px;
+}
+.legal-content h2:first-child { margin-top: 0; }
+.legal-content p { color: var(--muted); margin-bottom: 14px; font-size: 15.5px; }
+.legal-content ul { margin: 0 0 14px; padding-left: 22px; color: var(--muted); font-size: 15.5px; }
+.legal-content li { margin-bottom: 8px; }
+.legal-content strong { color: var(--text); }
+.legal-content a { color: var(--crimson); text-decoration: underline; }
+
+@media (max-width: 600px) {
+    .legal-hero { padding: 48px 20px 36px; }
+    .legal-hero h1 { font-size: 30px; }
+    .legal-content { padding: 40px 20px 64px; }
+}
+
 @media (max-width: 600px) {
     .checkout-page { padding: 28px 16px 64px; }
     .form-section, .order-summary-card { padding: 20px; }
     .order-success-card { padding: 48px 24px; }
-}
+}
+
+/* --- Legal Pages (Privacy, Terms, Shipping, Refund) --- */
+.legal-page {
+    background-color: var(--cream);
+    min-height: 100vh;
+    padding-bottom: 80px;
+}
+
+.legal-hero {
+    background: linear-gradient(135deg, var(--sand) 0%, var(--sand-dark) 100%);
+    padding: 40px 48px 80px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.legal-hero .header-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--crimson);
+    background: #fff;
+    padding: 8px 24px;
+    border-radius: 30px;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 15px rgba(199, 86, 106, 0.1);
+}
+
+.legal-hero h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(32px, 5vw, 48px);
+    font-weight: 700; /* Bold headings as requested */
+    color: var(--text);
+    margin-bottom: 16px;
+    letter-spacing: 1px;
+}
+
+.legal-hero p {
+    font-size: 18px;
+    color: var(--muted);
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.legal-content {
+    background: var(--warm-white);
+    max-width: 800px;
+    margin: -40px auto 0;
+    position: relative;
+    z-index: 10;
+    border-radius: 20px;
+    padding: 60px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.05);
+}
+
+.legal-content h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 24px;
+    font-weight: 700; /* Bold headings */
+    color: var(--crimson);
+    margin-top: 40px;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--sand);
+}
+
+.legal-content h2:first-child {
+    margin-top: 0;
+}
+
+.legal-content p, .legal-content ul, .legal-content li {
+    font-size: 16px;
+    line-height: 1.8;
+    color: var(--text);
+    margin-bottom: 16px;
+}
+
+.legal-content ul {
+    padding-left: 24px;
+}
+
+.legal-content li {
+    margin-bottom: 8px;
+}
+
+.legal-content a {
+    color: var(--crimson);
+    font-weight: 600;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s ease;
+}
+
+.legal-content a:hover {
+    border-bottom-color: var(--crimson);
+}
+
+@media (max-width: 768px) {
+    .legal-hero {
+        padding: 30px 24px 60px;
+    }
+    .legal-content {
+        margin: -20px 24px 0;
+        padding: 32px 24px;
+        border-radius: 12px;
+    }
+}
+
