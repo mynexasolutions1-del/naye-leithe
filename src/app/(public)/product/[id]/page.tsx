@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -7,7 +8,55 @@ import ProductClient from "./ProductClient";
 import ProductCard from "@/components/shop/ProductCard";
 import type { Product, Review } from "@/types/db";
 
-export const revalidate = 60;
+// Cached so generateMetadata and the page component share the same DB call
+// instead of each firing a separate query for the same product.
+const getProduct = unstable_cache(
+  async (id: string) => {
+    const { data } = await supabaseAdmin
+      .from("product")
+      .select(
+        `*, category(*), subcategory:sub_category(*),
+         images:product_image(*,attribute_value(*,attribute(*))),
+         attributes:product_attribute(*,attribute(*,values:attribute_value(*))),
+         variations:product_variation(*,options:variation_option(*,attribute_value(*,attribute(*))))`
+      )
+      .eq("id", id)
+      .single();
+    return data as Product | null;
+  },
+  ["product-detail"],
+  { revalidate: 60, tags: ["products"] }
+);
+
+const getProductReviews = unstable_cache(
+  async (productId: string) => {
+    const { data } = await supabaseAdmin
+      .from("review")
+      .select("*")
+      .eq("product_id", productId)
+      .eq("status", "approved")
+      .order("date", { ascending: false })
+      .limit(20);
+    return (data ?? []) as Review[];
+  },
+  ["product-reviews"],
+  { revalidate: 60, tags: ["reviews"] }
+);
+
+const getRelatedProducts = unstable_cache(
+  async (categoryId: number, excludeId: string) => {
+    const { data } = await supabaseAdmin
+      .from("product")
+      .select("*, category(*), images:product_image(*,attribute_value(*))")
+      .eq("category_id", categoryId)
+      .neq("id", excludeId)
+      .eq("stock_status", "instock")
+      .limit(8);
+    return (data ?? []) as Product[];
+  },
+  ["related-products"],
+  { revalidate: 60, tags: ["products"] }
+);
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -16,12 +65,7 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const { data: product } = await supabaseAdmin
-    .from("product")
-    .select("name, short_desc, img")
-    .eq("id", id)
-    .single();
-
+  const product = await getProduct(id);
   if (!product) return { title: "Product Not Found" };
   return {
     title: `${product.name} | Naye Leithe`,
@@ -34,40 +78,18 @@ export default async function ProductPage({ params, searchParams }: Props) {
   const { id } = await params;
   const { v } = await searchParams;
 
-  const { data: product } = await supabaseAdmin
-    .from("product")
-    .select(
-      `*, category(*), subcategory:sub_category(*),
-       images:product_image(*,attribute_value(*,attribute(*))),
-       attributes:product_attribute(*,attribute(*,values:attribute_value(*))),
-       variations:product_variation(*,options:variation_option(*,attribute_value(*,attribute(*))))`
-    )
-    .eq("id", id)
-    .single();
+  // All fetches run in parallel; getProduct is shared with generateMetadata
+  const [product, reviews, user] = await Promise.all([
+    getProduct(id),
+    getProductReviews(id),
+    getServerUser(),
+  ]);
 
   if (!product) notFound();
 
-  const { data: reviews } = await supabaseAdmin
-    .from("review")
-    .select("*")
-    .eq("product_id", id)
-    .eq("status", "approved")
-    .order("date", { ascending: false })
-    .limit(20);
-
-  let related: Product[] = [];
-  if (product.category_id) {
-    const { data: rel } = await supabaseAdmin
-      .from("product")
-      .select("*, category(*), images:product_image(*,attribute_value(*))")
-      .eq("category_id", product.category_id)
-      .neq("id", product.id)
-      .eq("stock_status", "instock")
-      .limit(8);
-    related = (rel ?? []) as Product[];
-  }
-
-  const user = await getServerUser();
+  const related = product.category_id
+    ? await getRelatedProducts(product.category_id, product.id)
+    : [];
 
   let selectedVariation = null;
   if (v && product.variations?.length) {

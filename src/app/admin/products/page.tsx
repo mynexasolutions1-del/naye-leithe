@@ -9,13 +9,14 @@ const PAGE_SIZE = 20;
 export default async function AdminProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; category?: string; status?: string; search?: string }>;
+  searchParams: Promise<{ page?: string; category?: string; status?: string; search?: string; sort?: string }>;
 }) {
   const sp = await searchParams;
   const page = parseInt(sp.page ?? "1", 10);
   const from = (page - 1) * PAGE_SIZE;
   const to   = from + PAGE_SIZE - 1;
   const search = sp.search?.trim() ?? "";
+  const sort = sp.sort ?? "newest";
 
   let query = supabaseAdmin
     .from("product")
@@ -24,17 +25,14 @@ export default async function AdminProductsPage({
        attributes:product_attribute(
          attribute_id,
          attribute:attribute(id, name)
-       ),
-       variations:product_variation(
-         id,
-         options:variation_option(
-           attribute_value_id,
-           attribute_value:attribute_value(id, value, attribute_id)
-         )
        )`,
       { count: "exact" }
-    )
-    .order("name");
+    );
+
+  if (sort === "oldest")   query = query.order("id", { ascending: true });
+  else if (sort === "az")  query = query.order("name", { ascending: true });
+  else if (sort === "za")  query = query.order("name", { ascending: false });
+  else                     query = query.order("id", { ascending: false }); // newest (default)
 
   if (sp.category) query = query.eq("cat_name", sp.category);
   if (sp.status)   query = query.eq("stock_status", sp.status);
@@ -64,6 +62,7 @@ export default async function AdminProductsPage({
         category: sp.category ?? "",
         status: sp.status ?? "",
         search: sp.search ?? "",
+        sort,
       }}
     />
   );

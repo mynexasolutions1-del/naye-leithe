@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { useToast } from "@/context/ToastContext";
@@ -39,6 +40,7 @@ function resolveColorLabel(variation?: ProductVariation | null): string {
 }
 
 export default function ProductCard({ product, variation }: ProductCardProps) {
+  const router = useRouter();
   const { addToCart, count } = useCart();
   const { toggle, isInWishlist } = useWishlist();
   const { showToast } = useToast();
@@ -76,7 +78,7 @@ export default function ProductCard({ product, variation }: ProductCardProps) {
   return (
     <div
       className="product-card"
-      onClick={() => (window.location.href = productUrl)}
+      onClick={() => router.push(productUrl)}
     >
       <div className="product-img-wrap">
         <Link href={productUrl} onClick={(e) => e.stopPropagation()}>

@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { updateInventoryStockAction } from "@/actions/admin";
 import Link from "next/link";
+import { optimizeCloudinary } from "@/lib/utils";
 import type { Product } from "@/types/db";
 
 const PAGE_SIZE = 50;
@@ -108,7 +109,7 @@ export default async function AdminInventoryPage({
                   <td>
                     <div className="admin-product-cell">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={p.img} alt={p.name} />
+                      <img src={optimizeCloudinary(p.img, 60)} alt={p.name} />
                       <div className="product-info">
                         <strong>{p.name}</strong>
                       </div>

@@ -42,11 +42,9 @@ export function slugify(text: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-/** Optimise a Cloudinary URL to a given width */
-export function optimizeCloudinary(url: string, width = 400): string {
-  if (!url) return url;
-  if (!url.includes("cloudinary.com")) return url;
-  return url.replace("/upload/", `/upload/w_${width},f_auto,q_auto/`);
+/** Returns the Cloudinary URL as-is — transformations disabled to save credits */
+export function optimizeCloudinary(url: string, _width = 400): string {
+  return url;
 }
 
 /** Get total items in cart */

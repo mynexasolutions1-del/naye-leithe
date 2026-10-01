@@ -23,8 +23,12 @@ const nextConfig: NextConfig = {
     // (and reverts to its own default of 300) any value below that, which
     // is exactly what happened the first time this was set to 0.
     staleTimes: {
-      dynamic: 0,
-      static: 30,
+      // 0 disabled the router cache entirely — every <Link> click re-fetched
+      // from the server even for pages whose data hadn't changed. 30s gives
+      // public pages a short client-side cache; admin pages use force-dynamic
+      // so they bypass this and always fetch fresh.
+      dynamic: 30,
+      static: 300,
     },
   },
 };

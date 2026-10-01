@@ -1,6 +1,6 @@
 "use server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { uploadImageToCloudinary } from "@/lib/serverImageUpload";
 
@@ -437,6 +437,7 @@ export async function deleteProductAction(formData: FormData) {
   }
 
   revalidatePath("/admin/products");
+  revalidateTag("products");
   redirect("/admin/products?_flash=Product+deleted&_type=success");
 }
 
@@ -549,6 +550,7 @@ export async function createProductAction(
     }
 
     revalidatePath("/admin/products");
+    revalidateTag("products");
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message ?? "Unknown error" };
@@ -649,6 +651,7 @@ export async function updateProductAction(
 
     revalidatePath("/admin/products");
     revalidatePath(`/admin/products/${productId}/edit`);
+    revalidateTag("products");
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message ?? "Unknown error" };

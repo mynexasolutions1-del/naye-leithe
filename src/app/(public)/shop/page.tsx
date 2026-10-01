@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import ProductCard from "@/components/shop/ProductCard";
 import ShopSidebar from "./ShopSidebar";
@@ -5,9 +6,75 @@ import type { Category, Product } from "@/types/db";
 import type { Metadata } from "next";
 import Link from "next/link";
 
-export const metadata: Metadata = { title: "Shop — Naye Leithe" };
+const getShopCategories = unstable_cache(
+  async (): Promise<Category[]> => {
+    const { data } = await supabaseAdmin
+      .from("category")
+      .select("*, subcategories:sub_category(*)");
+    return (data as Category[]) ?? [];
+  },
+  ["shop-categories"],
+  { revalidate: 300 }
+);
+
+const getSubcategoryId = unstable_cache(
+  async (name: string): Promise<number | null> => {
+    const { data } = await supabaseAdmin
+      .from("sub_category")
+      .select("id")
+      .eq("name", name)
+      .single();
+    return data?.id ?? null;
+  },
+  ["subcategory-id"],
+  { revalidate: 300 }
+);
 
 const PAGE_SIZE = 20;
+
+// Slim select: listing cards only need basic fields + category name + whether
+// attributes exist (for "Select Options" button). No images array, no full
+// attribute data — those are only needed on the product detail page.
+const LISTING_SELECT =
+  "*, category(name), subcategory:sub_category(name), attributes:product_attribute(id)";
+
+interface ProductQueryParams {
+  category?: string;
+  subcategoryId?: number | null;
+  search?: string;
+  sort: string;
+  onSale: boolean;
+  newArrival?: string;
+  page: number;
+}
+
+const getShopProducts = unstable_cache(
+  async ({ category, subcategoryId, search, sort, onSale, newArrival, page }: ProductQueryParams) => {
+
+    const from = (page - 1) * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    let query = supabaseAdmin
+      .from("product")
+      .select(LISTING_SELECT, { count: "exact" });
+
+    if (search) query = query.ilike("name", `%${search}%`);
+    if (category) query = query.eq("cat_name", category);
+    if (subcategoryId) query = query.eq("sub_category_id", subcategoryId);
+    if (onSale) query = query.not("orig", "is", null).neq("orig", "");
+    if (newArrival) query = query.eq("is_new_arrival", true);
+    if (sort === "newest") query = query.order("id", { ascending: false });
+
+    query = query.range(from, to);
+
+    const { data, count } = await query;
+    return { products: (data as Product[]) ?? [], count: count ?? 0 };
+  },
+  ["shop-products"],
+  { revalidate: 60, tags: ["products"] }
+);
+
+export const metadata: Metadata = { title: "Shop — Naye Leithe" };
 
 interface SearchParams {
   category?: string;
@@ -27,8 +94,6 @@ export default async function ShopPage({
 }) {
   const sp = await searchParams;
   const page = parseInt(sp.page ?? "1", 10);
-  const from = (page - 1) * PAGE_SIZE;
-  const to = from + PAGE_SIZE - 1;
 
   // Active filters
   const activeCategories = sp.category ? sp.category.split(",") : [];
@@ -37,33 +102,21 @@ export default async function ShopPage({
   const priceMax = parseInt(sp.price_max ?? "10000");
   const sort = sp.sort_by ?? "newest";
 
-  // Build query
-  let query = supabaseAdmin
-    .from("product")
-    .select(
-      "*, category(*), subcategory:sub_category(*), images:product_image(*,attribute_value(*)), attributes:product_attribute(*, attribute(*))",
-      { count: "exact" }
-    );
+  // Resolve subcategory ID (cached) before the main query so it can be part
+  // of the cache key for getShopProducts
+  const subcategoryId = sp.subcategory ? await getSubcategoryId(sp.subcategory) : null;
 
-  if (sp.search) query = query.ilike("name", `%${sp.search}%`);
-  if (sp.category) query = query.eq("cat_name", sp.category);
-  if (sp.subcategory) {
-    const { data: sub } = await supabaseAdmin
-      .from("sub_category")
-      .select("id")
-      .eq("name", sp.subcategory)
-      .single();
-    if (sub) query = query.eq("sub_category_id", sub.id);
-  }
-  if (onSale) query = query.not("orig", "is", null).neq("orig", "");
-  if (sp.new_arrival) query = query.eq("is_new_arrival", true);
+  const { products, count } = await getShopProducts({
+    category: sp.category,
+    subcategoryId,
+    search: sp.search,
+    sort,
+    onSale,
+    newArrival: sp.new_arrival,
+    page,
+  });
 
-  if (sort === "newest") query = query.order("id", { ascending: false });
-
-  query = query.range(from, to);
-
-  const { data: products, count } = await query;
-  let filtered = (products as Product[]) ?? [];
+  let filtered = products;
 
   // Post-fetch filters (price sort, price max)
   if (sp.price_max) {
@@ -79,11 +132,8 @@ export default async function ShopPage({
 
   const totalPages = Math.ceil((count ?? 0) / PAGE_SIZE);
 
-  // Categories for sidebar
-  const { data: categories } = await supabaseAdmin
-    .from("category")
-    .select("*, subcategories:sub_category(*)");
-  const cats = (categories as Category[]) ?? [];
+  // Categories for sidebar (cached)
+  const cats = await getShopCategories();
 
   // Build pagination URL
   function buildUrl(p: number) {

@@ -7,56 +7,58 @@ import NewsletterForm from "@/components/home/NewsletterForm";
 import type { Category, Product, Review } from "@/types/db";
 import { slugify } from "@/lib/utils";
 
+const PRODUCT_SELECT =
+  "*, category(*), subcategory:sub_category(*), images:product_image(*), attributes:product_attribute(*, attribute(*))";
+
 const getHomeData = unstable_cache(
   async () => {
+    // First fetch categories so we know which cat_names to query
+    const { data: categories } = await supabaseAdmin
+      .from("category")
+      .select("*, subcategories:sub_category(*)");
+
+    const cats = (categories as Category[]) ?? [];
+
+    // Fetch everything else in parallel — per-category queries limited to 8
+    // at DB level instead of pulling 100 products and slicing in JS
     const [
-      { data: categories },
       { data: newArrivals },
       { data: featured },
-      { data: allCatProducts },
       { data: featuredReviews },
+      ...catResults
     ] = await Promise.all([
       supabaseAdmin
-        .from("category")
-        .select("*, subcategories:sub_category(*)"),
-      supabaseAdmin
         .from("product")
-        .select("*, category(*), subcategory:sub_category(*), images:product_image(*), attributes:product_attribute(*, attribute(*))")
+        .select(PRODUCT_SELECT)
         .eq("is_new_arrival", true)
         .order("id", { ascending: false })
         .limit(12),
       supabaseAdmin
         .from("product")
-        .select("*, category(*), subcategory:sub_category(*), images:product_image(*), attributes:product_attribute(*, attribute(*))")
+        .select(PRODUCT_SELECT)
         .eq("is_featured", true)
         .limit(12),
-      supabaseAdmin
-        .from("product")
-        .select("*, category(*), subcategory:sub_category(*), images:product_image(*), attributes:product_attribute(*, attribute(*))")
-        .limit(100),
       supabaseAdmin
         .from("review")
         .select("*, product(*)")
         .eq("is_featured", true)
         .eq("status", "Approved"),
+      ...cats.map((cat) =>
+        supabaseAdmin
+          .from("product")
+          .select(PRODUCT_SELECT)
+          .eq("cat_name", cat.name)
+          .limit(8)
+      ),
     ]);
 
-    const cats = (categories as Category[]) ?? [];
-    const catNames = cats.map((c) => c.name);
-    const catProductsMap: Record<string, Product[]> = {};
-    for (const p of (allCatProducts as Product[]) ?? []) {
-      if (!p.cat_name || !catNames.includes(p.cat_name)) continue;
-      if (!catProductsMap[p.cat_name]) catProductsMap[p.cat_name] = [];
-      if (catProductsMap[p.cat_name].length < 8) catProductsMap[p.cat_name].push(p);
-    }
-
     const categorySections = cats
-      .filter((cat) => (catProductsMap[cat.name]?.length ?? 0) > 0)
-      .map((cat) => ({
+      .map((cat, i) => ({
         name: cat.name,
         id: slugify(cat.name),
-        products: catProductsMap[cat.name],
-      }));
+        products: (catResults[i]?.data as Product[]) ?? [],
+      }))
+      .filter((s) => s.products.length > 0);
 
     return {
       categories: cats,
@@ -67,7 +69,7 @@ const getHomeData = unstable_cache(
     };
   },
   ["home-data"],
-  { revalidate: 300 }
+  { revalidate: 300, tags: ["products"] }
 );
 
 export default async function HomePage() {

@@ -8,32 +8,8 @@ import { optimizeCloudinary } from "@/lib/utils";
 import ConfirmDeleteButton from "@/components/admin/ConfirmDeleteButton";
 import type { Category } from "@/types/db";
 
-/* ── Attribute summary helper ───────────────────────────────────────────────
-   For each attribute linked to a product, collect unique variation option
-   values — mirrors the Flask Jinja2 vals computation exactly.
-────────────────────────────────────────────────────────────────────────────*/
-interface AttrSummaryItem { name: string; values: string[] }
-
-function getAttributeSummary(product: any): AttrSummaryItem[] {
-  const pas: any[] = product.attributes ?? [];
-  if (!pas.length) return [];
-
-  return pas.map((pa: any) => {
-    const attrId   = pa.attribute_id;
-    const attrName = pa.attribute?.name ?? String(attrId);
-    const seen     = new Set<string>();
-    const values: string[] = [];
-
-    for (const v of product.variations ?? []) {
-      for (const opt of v.options ?? []) {
-        if (opt.attribute_value?.attribute_id === attrId) {
-          const val = opt.attribute_value?.value;
-          if (val && !seen.has(val)) { seen.add(val); values.push(val); }
-        }
-      }
-    }
-    return { name: attrName, values };
-  });
+function getAttributeNames(product: any): string[] {
+  return (product.attributes ?? []).map((pa: any) => pa.attribute?.name ?? String(pa.attribute_id));
 }
 
 /* ── Edit pencil icon ────────────────────────────────────────────────────── */
@@ -53,7 +29,7 @@ interface Props {
   totalCount: number;
   currentPage: number;
   totalPages: number;
-  currentFilters: { category: string; status: string; search: string };
+  currentFilters: { category: string; status: string; search: string; sort: string };
 }
 
 /* ── Component ───────────────────────────────────────────────────────────── */
@@ -70,11 +46,17 @@ export default function ProductsClient({
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [searchValue, setSearchValue] = useState(currentFilters.search);
 
-  /* ── Search — was purely client-side (DOM show/hide on the current page's
-     rows), which meant searching for anything not already on screen found
-     nothing since products are server-paginated. Now debounced into a real
-     URL-driven search that runs across the whole catalog, same pattern as
-     the category/status filters below. ── */
+  function buildParams(overrides: Record<string, string> = {}) {
+    const p = new URLSearchParams();
+    if (currentFilters.category) p.set("category", currentFilters.category);
+    if (currentFilters.status)   p.set("status",   currentFilters.status);
+    if (currentFilters.search)   p.set("search",   currentFilters.search);
+    if (currentFilters.sort && currentFilters.sort !== "newest") p.set("sort", currentFilters.sort);
+    p.set("page", "1");
+    Object.entries(overrides).forEach(([k, v]) => v ? p.set(k, v) : p.delete(k));
+    return p.toString();
+  }
+
   function handleSearch(e: React.ChangeEvent<HTMLInputElement>) {
     const value = e.target.value;
     setSearchValue(value);
@@ -83,29 +65,24 @@ export default function ProductsClient({
       const p = new URLSearchParams();
       if (currentFilters.category) p.set("category", currentFilters.category);
       if (currentFilters.status)   p.set("status",   currentFilters.status);
+      if (currentFilters.sort && currentFilters.sort !== "newest") p.set("sort", currentFilters.sort);
       if (value.trim()) p.set("search", value.trim());
       p.set("page", "1");
       router.push(`/admin/products${p.size ? `?${p.toString()}` : ""}`);
     }, 400);
   }
 
-  /* ── Category / Status onChange → URL navigation (mirrors applyFilters) ── */
-  function applyFilter(key: "category" | "status", value: string) {
-    const p = new URLSearchParams();
-    if (key !== "category" && currentFilters.category) p.set("category", currentFilters.category);
-    if (key !== "status"   && currentFilters.status)   p.set("status",   currentFilters.status);
-    if (currentFilters.search) p.set("search", currentFilters.search);
-    if (value) p.set(key, value);
-    p.set("page", "1");
-    router.push(`/admin/products${p.size ? `?${p.toString()}` : ""}`);
+  function applyFilter(key: "category" | "status" | "sort", value: string) {
+    const qs = buildParams({ [key]: value });
+    router.push(`/admin/products${qs ? `?${qs}` : ""}`);
   }
 
-  /* ── Pagination URL builder ─────────────────────────────────────────────── */
   function pageUrl(p: number) {
     const params = new URLSearchParams();
     if (currentFilters.category) params.set("category", currentFilters.category);
     if (currentFilters.status)   params.set("status",   currentFilters.status);
     if (currentFilters.search)   params.set("search",   currentFilters.search);
+    if (currentFilters.sort && currentFilters.sort !== "newest") params.set("sort", currentFilters.sort);
     params.set("page", String(p));
     return `/admin/products?${params.toString()}`;
   }
@@ -150,6 +127,16 @@ export default function ProductsClient({
               <option value="instock">Active</option>
               <option value="outofstock">Out of Stock</option>
             </select>
+            <select
+              className="admin-select"
+              value={currentFilters.sort}
+              onChange={(e) => applyFilter("sort", e.target.value)}
+            >
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+              <option value="az">Name A–Z</option>
+              <option value="za">Name Z–A</option>
+            </select>
           </div>
           <div className="search-input">
             <input
@@ -177,7 +164,7 @@ export default function ProductsClient({
             </thead>
             <tbody ref={tbodyRef}>
               {products.map((p) => {
-                const attrSummary = getAttributeSummary(p);
+                const attrNames = getAttributeNames(p);
                 return (
                   <tr key={p.id}>
                     {/* Product cell */}
@@ -204,17 +191,14 @@ export default function ProductsClient({
                     {/* Badge */}
                     <td><span className="badge-tag">{p.badge ?? "—"}</span></td>
 
-                    {/* Attributes — matches Flask's attribute-summary logic */}
+                    {/* Attributes */}
                     <td>
                       {p.product_type === "simple" ? (
                         <span style={{ color: "var(--text-muted)" }}>—</span>
-                      ) : attrSummary.length > 0 ? (
+                      ) : attrNames.length > 0 ? (
                         <div className="attribute-summary">
-                          {attrSummary.map((a) => (
-                            <div key={a.name} style={{ fontSize: "0.75rem" }}>
-                              <span style={{ color: "#64748b", fontWeight: 600 }}>{a.name}: </span>
-                              <span style={{ color: "#1e293b" }}>{a.values.join(", ") || "—"}</span>
-                            </div>
+                          {attrNames.map((name) => (
+                            <div key={name} style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: 600 }}>{name}</div>
                           ))}
                         </div>
                       ) : (
