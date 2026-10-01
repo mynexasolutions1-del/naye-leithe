@@ -437,7 +437,7 @@ export async function deleteProductAction(formData: FormData) {
   }
 
   revalidatePath("/admin/products");
-  revalidateTag("products");
+  revalidateTag("products", "max");
   redirect("/admin/products?_flash=Product+deleted&_type=success");
 }
 
@@ -550,7 +550,7 @@ export async function createProductAction(
     }
 
     revalidatePath("/admin/products");
-    revalidateTag("products");
+    revalidateTag("products", "max");
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message ?? "Unknown error" };
@@ -651,7 +651,7 @@ export async function updateProductAction(
 
     revalidatePath("/admin/products");
     revalidatePath(`/admin/products/${productId}/edit`);
-    revalidateTag("products");
+    revalidateTag("products", "max");
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message ?? "Unknown error" };
